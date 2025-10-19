@@ -1,42 +1,79 @@
-import { useState, useEffect } from "react";
-import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useState } from "react";
+import { useWalletClient } from "wagmi";
+import { Contract, BrowserProvider } from "ethers";
+import { TICKET_NFT_ADDRESS, TICKET_NFT_ABI } from "@/lib/contracts";
 
 export default function MintTicket() {
-  const { address, isConnected } = useAccount();
-  const { connectors, connect, status, error } = useConnect();
-  const { disconnect } = useDisconnect();
-  const [isMounted, setIsMounted] = useState(false);
+  const { data: walletClient } = useWalletClient();
+  const [eventId, setEventId] = useState("");
+  const [metadataHash, setMetadataHash] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => setIsMounted(true), []);
+ const handleMint = async () => {
+  if (!walletClient) return alert("Wallet not connected!");
+  if (!eventId) return alert("Please enter an Event ID!");
+  if (!metadataHash) return alert("Please enter a metadata hash!");
 
-  if (!isMounted) return null; // prevents hydration mismatch
+  setLoading(true);
+  try {
+    const provider = new BrowserProvider(walletClient);
+    const signer = await provider.getSigner();
+    const contract = new Contract(TICKET_NFT_ADDRESS, TICKET_NFT_ABI, signer);
+
+    const to = await signer.getAddress();
+
+    // Convert eventId (string → number)
+    const eventIdNum = BigInt(eventId);
+
+    // Make sure metadataHash starts with 0x and is 66 chars (bytes32)
+    const validHash = metadataHash.startsWith("0x")
+      ? metadataHash
+      : "0x" + metadataHash.padEnd(64, "0");
+
+    const tx = await contract.mintTicket(to, eventIdNum, validHash);
+    await tx.wait();
+
+    setTxHash(tx.hash);
+    alert("✅ Ticket minted successfully!");
+  } catch (err: any) {
+    console.error("Mint error:", err);
+    alert(`Mint failed: ${err?.reason || err?.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      {isConnected ? (
-        <>
-          <p>Connected: {address}</p>
-          <button
-            onClick={() => disconnect()}
-            className="px-4 py-2 bg-red-500 text-white rounded"
-          >
-            Disconnect
-          </button>
-        </>
-      ) : (
-        <>
-          {connectors.map((connector) => (
-            <button
-              key={connector.uid}
-              onClick={() => connect({ connector })}
-              disabled={status === "pending"}
-              className="px-4 py-2 bg-blue-600 text-white rounded"
-            >
-              {connector.name}
-            </button>
-          ))}
-          {error && <p className="text-red-500">{error.message}</p>}
-        </>
+    <div className="p-6 max-w-md mx-auto bg-white rounded-2xl shadow space-y-3">
+      <h2 className="text-xl font-semibold text-center">🎟️ Mint Ticket</h2>
+      <input
+        type="number"
+        placeholder="Event ID"
+        className="border p-2 rounded w-full"
+        value={eventId}
+        onChange={(e) => setEventId(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="Metadata Hash (bytes32)"
+        className="border p-2 rounded w-full"
+        value={metadataHash}
+        onChange={(e) => setMetadataHash(e.target.value)}
+      />
+      <button
+        disabled={loading}
+        onClick={handleMint}
+        className="bg-blue-600 text-white p-2 rounded w-full hover:bg-blue-700"
+      >
+        {loading ? "Minting..." : "Mint Ticket"}
+      </button>
+      {txHash && (
+        <p className="text-sm text-gray-500 break-all">
+          Tx Hash: {txHash}
+        </p>
       )}
     </div>
   );
