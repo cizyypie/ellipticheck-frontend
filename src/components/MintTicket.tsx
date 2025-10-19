@@ -10,7 +10,7 @@ export default function MintTicket() {
   const [txHash, setTxHash] = useState("");
   const [loading, setLoading] = useState(false);
 
- const handleMint = async () => {
+const handleMint = async (): Promise<void> => {
   if (!walletClient) return alert("Wallet not connected!");
   if (!eventId) return alert("Please enter an Event ID!");
   if (!metadataHash) return alert("Please enter a metadata hash!");
@@ -22,11 +22,8 @@ export default function MintTicket() {
     const contract = new Contract(TICKET_NFT_ADDRESS, TICKET_NFT_ABI, signer);
 
     const to = await signer.getAddress();
-
-    // Convert eventId (string → number)
     const eventIdNum = BigInt(eventId);
 
-    // Make sure metadataHash starts with 0x and is 66 chars (bytes32)
     const validHash = metadataHash.startsWith("0x")
       ? metadataHash
       : "0x" + metadataHash.padEnd(64, "0");
@@ -36,14 +33,21 @@ export default function MintTicket() {
 
     setTxHash(tx.hash);
     alert("✅ Ticket minted successfully!");
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Mint error:", err);
-    alert(`Mint failed: ${err?.reason || err?.message}`);
+
+    if (err instanceof Error) {
+      alert(`Mint failed: ${err.message}`);
+    } else if (typeof err === "object" && err !== null && "reason" in err) {
+      const reason = (err as { reason?: string }).reason ?? "Unknown reason";
+      alert(`Mint failed: ${reason}`);
+    } else {
+      alert("Mint failed: Unknown error");
+    }
   } finally {
     setLoading(false);
   }
 };
-
 
 
   return (
